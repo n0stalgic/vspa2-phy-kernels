@@ -3,7 +3,7 @@
 #include "vcpu.h"
 #include "vspa.h"
 
-unsigned int mixer_vspa(cfixed16_t *mix_out, cfixed16_t *mix_in,
+unsigned int mixer_vspa(cfixed16_t * __restrict mix_out, cfixed16_t *mix_in,
 			uint32_t phase_in, int32_t freq_in, uint32_t L)
 {
 
@@ -26,13 +26,13 @@ unsigned int mixer_vspa(cfixed16_t *mix_out, cfixed16_t *mix_in,
 	
 	__set_VRAincr_rS0(__AU_COUNT__ * 2);
 	__set_VRAincr_rV(__AU_COUNT__ * 2);
+	__set_range1_rS0(0, __AU_COUNT__ * 2);
 
-	for (uint32_t i = 0; i < L; i++)
+	for (int32_t i = 0; i < L; i++)
 	{
-		__set_VRAptr_rS0(_VR0);
 		__set_VRAptr_rV(_VR5);
 
-		__ld_vec(mix_in + i * (__AU_COUNT__ * 2))	
+		__ld_vec(mix_in + i * (__AU_COUNT__ * 2))
 		__ld_Rx(normal, 0);
 		__rd_S0();
 		__rd_S1();
@@ -50,4 +50,3 @@ unsigned int mixer_vspa(cfixed16_t *mix_out, cfixed16_t *mix_in,
 	nco_phase = __get_nco_phase_uint();
 	return nco_phase;
 }
-

@@ -8,7 +8,7 @@ Usage:
 Arguments:
     elf_path   — path to .eld file (absolute or relative to CWD)
     au_config  — device string, e.g. vspa2_16au, vspa2_32au
-    --cycles   — pass -showpc to runsim and report cycle count (slow)
+    --cycles   — pass -showpc to runsim and report regs and cycle count (slow)
 
 Resolves runsim in order:
     1. SIMULATOR_PATH environment variable
@@ -53,7 +53,7 @@ def main() -> int:
     parser.add_argument("elf_path", help="Path to .eld file")
     parser.add_argument("au_config", help="Device string, e.g. vspa2_16au")
     parser.add_argument("--cycles", action="store_true",
-                        help="Pass -showpc to runsim and report cycle count (slow)")
+                        help="Pass -showpc and -showregs to runsim and report cycle count (slow)")
     args = parser.parse_args()
 
     elf_path = Path(args.elf_path).resolve()
@@ -67,12 +67,14 @@ def main() -> int:
     elf_dir = str(elf_path.parent)
     elf_name = elf_path.name
     showpc_flag = "-showpc" if args.cycles else ""
+    showregs_flag = "-showregs" if args.cycles else ""
 
     print(f"  ELF    : {elf_name}")
     print(f"  Target : {au_config}")
     print(f"  Runner : {runsim}")
+    print(f"  Flags  : {showpc_flag} {showregs_flag}")
 
-    sim_cmd = f"cd {elf_dir} && {runsim} -d {au_config} {showpc_flag} {elf_name} 2>/dev/null"
+    sim_cmd = f"cd {elf_dir} && {runsim} -d {au_config} {showpc_flag} {showregs_flag} {elf_name} 2>/dev/null"
     try:
         result = subprocess.run(
             ["bash", "-c", sim_cmd.strip()],

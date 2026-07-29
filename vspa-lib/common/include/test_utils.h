@@ -94,4 +94,37 @@ static int vspa_array_cmp(const unsigned *actual, const unsigned *expected, int 
     return failures;
 }
 
+/* Half-fixed16 packed comparison: each uint32 = {im[31:16], re[15:0]}.
+ * Allows ±1 LSB per component within the same sign — sufficient to absorb
+ * 1-ULP float32 MAC differences that land on a quantisation boundary. */
+static int _hf16_near(unsigned short a, unsigned short b)
+{
+    unsigned short fa, fb;
+    if ((a & 0x8000u) != (b & 0x8000u)) return 0;
+    fa = a & 0x7fffu;
+    fb = b & 0x7fffu;
+    return fa == fb || fa == (unsigned short)(fb + 1) || fb == (unsigned short)(fa + 1);
+}
+
+static int vspa_array_cmp_hf16(const unsigned *actual, const unsigned *expected, int n)
+{
+    int i, failures = 0;
+    for (i = 0; i < n; i++) {
+        unsigned short a_re = (unsigned short)(actual[i]        & 0xffffu);
+        unsigned short a_im = (unsigned short)(actual[i]  >> 16        );
+        unsigned short e_re = (unsigned short)(expected[i]       & 0xffffu);
+        unsigned short e_im = (unsigned short)(expected[i] >> 16        );
+        if (!_hf16_near(a_re, e_re) || !_hf16_near(a_im, e_im)) {
+            if (failures == 0)
+                printf("FIRST MISMATCH idx=%d  actual=0x%08X  expected=0x%08X\n",
+                       i, actual[i], expected[i]);
+            failures++;
+        }
+    }
+    if (failures > 0)
+        printf("TOTAL MISMATCHES: %d / %d\n", failures, n);
+    printf("%s\n", failures == 0 ? "PASS" : "FAIL");
+    return failures;
+}
+
 #endif /* VSPA_TEST_UTILS_H */

@@ -36,6 +36,7 @@ VCFLAGS = \
     -core_type $(CORE) \
     -ansi off \
     -g -O3 -Os \
+    --keep \
     -opt=noalias_by_type \
     -mvcpu \
     -msgstyle gcc \
@@ -68,9 +69,10 @@ $(TARGET): $(SRCS) generate
 	    $(VSPA_TOOL)/lib/$(ARCH)/librt_au$(AU)_$(CORE).elb \
 	    -o $@
 	@echo "Built: $@"
+	@mv *.s1 *.sl *.eln build/
 
 test: $(TARGET)
-	python3 $(VSPA_LIB)/tools/run_sim.py $(TARGET) $(ARCH)_$(AU)au $(CYCLES)
+	python3 $(VSPA_LIB)/tools/run_sim.py $(TARGET) $(ARCH)_$(AU)au 
 
 clean:
 	rm -rf $(BUILD_DIR) vectors/input.hex vectors/ref.hex
