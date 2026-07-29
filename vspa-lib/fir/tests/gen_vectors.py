@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
-"""x2_interp vector generator: 2x upsample + 32-tap float32 RRC FIR.
+"""x2_interp vector generator: 2x upsample + 32-tap fp16-input RRC FIR.
 
-Input:  N_SAMPLES complex float32 symbols.
+Input:  N_SAMPLES complex fp16 symbols (from QAM modulator).
 Oracle: direct polyphase E0/E1 accumulation (mirrors kernel rmad+rmac chain).
+        Inputs quantized to fp16 (S1prec=half), taps remain float32 (S0prec=single).
 """
 
 from __future__ import annotations
@@ -43,13 +44,12 @@ SPS       = 1
 SPAN      = 31
 
 
-def _write_complex_f32(c: np.ndarray, path: str) -> None:
-    re = np.asarray(c).real.astype(np.float32).view(np.uint32)
-    im = np.asarray(c).imag.astype(np.float32).view(np.uint32)
-    buf = np.empty(2 * len(re), dtype=np.uint32)
-    buf[0::2] = re
-    buf[1::2] = im
-    write_hex_u32(buf, path)
+def _write_complex_f16(c: np.ndarray, path: str) -> None:
+    """Pack complex fp16 as one uint32 per sample: re in low 16, im in high 16."""
+    c = np.asarray(c, dtype=np.complex64)
+    re_u16 = c.real.astype(np.float16).view(np.uint16).astype(np.uint32)
+    im_u16 = c.imag.astype(np.float16).view(np.uint16).astype(np.uint32)
+    write_hex_u32(re_u16 | (im_u16 << 16), path)
 
 
 def _to_hf16(v: np.float32) -> int:
@@ -77,7 +77,8 @@ def _polyphase_f32(x: np.ndarray, E0: np.ndarray, E1: np.ndarray) -> np.ndarray:
     j=0  → rmad: acc  = float32(tap * x)          (plain multiply, no prior acc)
     j>=1 → rmac: acc  = fmaf(tap, x, acc)          (fused, one rounding)
 
-    Using fmaf matches VSPA2's single-rounding MAC vs. two-step Python float32.
+    x must already be quantized to fp16 (caller's responsibility) since
+    S1prec=half widens each delay-line element to float32 before the MAC.
     """
     E0 = np.asarray(E0, dtype=np.float32)
     E1 = np.asarray(E1, dtype=np.float32)
@@ -106,9 +107,11 @@ def _polyphase_f32(x: np.ndarray, E0: np.ndarray, E1: np.ndarray) -> np.ndarray:
 def main() -> None:
     rng = np.random.default_rng(42)
     x_raw = (rng.uniform(-0.5, 0.5, N_SAMPLES)
-             + 1j * rng.uniform(-0.5, 0.5, N_SAMPLES))
+             + 1j * rng.uniform(-0.5, 0.5, N_SAMPLES)).astype(np.complex64)
 
-    x = x_raw.astype(np.complex64)
+    # Quantize to fp16: mirrors what S1prec=half loads from the delay line.
+    x = (x_raw.real.astype(np.float16).astype(np.float32)
+         + 1j * x_raw.imag.astype(np.float16).astype(np.float32)).astype(np.complex64)
 
     taps_raw = rrc_taps(BETA, SPS, SPAN)
     assert len(taps_raw) == N_TAPS, f'expected {N_TAPS} taps, got {len(taps_raw)}'
@@ -120,7 +123,7 @@ def main() -> None:
     y = _polyphase_f32(x, E0, E1)
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
-    _write_complex_f32(x,    str(OUTDIR / 'input.hex'))
+    _write_complex_f16(x_raw, str(OUTDIR / 'input.hex'))
     write_hex_u32(taps.view(np.uint32), str(OUTDIR / 'taps.hex'))
     _write_complex_fixed16(y, str(OUTDIR / 'ref.hex'))
 

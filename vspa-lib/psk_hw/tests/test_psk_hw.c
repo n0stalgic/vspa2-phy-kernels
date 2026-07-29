@@ -8,8 +8,8 @@
 // constellation mapping itself is correct, not throughput. See
 // gen_vectors.py for the matching vector generation.
 //
-// Each output cfloat16 packs as (imag_fp16<<16) | real_fp16 in one uint32;
-// compared uint32-wise against ref.hex via vspa_array_cmp.
+// Each output is a vspa_complex_float16 (re fp16, im fp16), packed into one
+// uint32 as (im_u16 << 16) | re_u16; compared via vspa_array_cmp.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -55,12 +55,13 @@ static const unsigned int INPUT_DATA[N_INPUT_WORDS] = {
 #include "vectors/input.hex"
 };
 
+// ref.hex: cfloat16 packed as (im_u16 << 16) | re_u16, one uint32 per symbol.
 static const unsigned int REF_DATA[N_OUT_SYMBOLS] = {
 #include "vectors/ref.hex"
 };
 
 _VSPA_VECTOR_ALIGN static unsigned int bitIn[N_INPUT_WORDS];
-_VSPA_VECTOR_ALIGN static unsigned int qamOut[N_OUT_SYMBOLS];
+_VSPA_VECTOR_ALIGN static vspa_complex_float16 qamOut[N_OUT_SYMBOLS];
 
 int main(void)
 {
@@ -71,8 +72,8 @@ int main(void)
 
     KCYC_INIT();
     KCYC_START();
-    QAM_MOD_FN(bitIn, (vspa_complex_float16 *)qamOut, (unsigned int)N_LINES);
+    QAM_MOD_FN(bitIn, qamOut, (unsigned int)N_LINES);
     KCYC_STOP_PRINT();
 
-    return vspa_array_cmp(qamOut, REF_DATA, N_OUT_SYMBOLS);
+    return vspa_array_cmp((unsigned *)qamOut, REF_DATA, N_OUT_SYMBOLS);
 }

@@ -28,6 +28,7 @@ from utils.hex_io import write_hex_u32
 
 import numpy as np
 
+
 TOKEN_TO_MODE = {
     'BPSK': 'bpsk',
     'QPSK': 'qpsk',
@@ -57,13 +58,14 @@ def main() -> None:
     rng = np.random.default_rng(seed=seed)
     bits_u32 = rng.integers(0, 1 << 32, size=n_input_words, dtype=np.uint64).astype(np.uint32)
 
-    ref_u32 = r_qam_mod(bits_u32, mode)
-    if ref_u32.size != n_symbols:
-        raise SystemExit(f'oracle size mismatch: got {ref_u32.size}, expected {n_symbols}')
+    # ref.hex: cfloat16 packed as (im_u16 << 16) | re_u16, one uint32 per symbol.
+    ref_cfloat16 = r_qam_mod(bits_u32, mode)
+    if ref_cfloat16.size != n_symbols:
+        raise SystemExit(f'oracle size mismatch: got {ref_cfloat16.size}, expected {n_symbols}')
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
     write_hex_u32(bits_u32, str(OUTDIR / 'input.hex'))
-    write_hex_u32(ref_u32, str(OUTDIR / 'ref.hex'))
+    write_hex_u32(ref_cfloat16, str(OUTDIR / 'ref.hex'))
 
     print(f'Generated qam_hw vectors: mode={token} N_LINES={N_LINES} '
           f'(input_words={n_input_words}, ref_symbols={n_symbols})')

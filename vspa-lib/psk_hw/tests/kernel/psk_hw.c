@@ -21,13 +21,13 @@
 
 #pragma optimization_level 0
 
-void mod_16qam_hw(uint32_t *bit_in, vspa_complex_float16* pam16_out, uint32_t N)
+void mod_16qam_hw(uint32_t *bit_in, vspa_complex_float32* pam16_out, uint32_t N)
 {
 	iowr(LD_RF_CONTROL, QAM_16);
 
 	__clr_VRA();
 	__set_creg(255, 0);
-	__set_prec(single, half_fixed, half_fixed, single, half);
+	__set_prec(single, half_fixed, half_fixed, single, single);
 	__set_Smode(S0hword, S1straight, S2zeros);
 	
 	__set_VRAptr_rV(_VR0);
@@ -53,7 +53,7 @@ void mod_16qam_hw(uint32_t *bit_in, vspa_complex_float16* pam16_out, uint32_t N)
 }
 
 
-void mod_qpsk_hw(uint32_t *bit_in, vspa_complex_float16* qpsk_out, uint32_t N)
+void mod_qpsk_hw(uint32_t *bit_in, vspa_complex_float32* qpsk_out, uint32_t N)
 {
 
 	iowr(LD_RF_CONTROL, 2);
@@ -62,7 +62,7 @@ void mod_qpsk_hw(uint32_t *bit_in, vspa_complex_float16* qpsk_out, uint32_t N)
 	
 	__clr_VRA();
 	__set_creg(255,0);
-	__set_prec(single, half_fixed, half_fixed, single, half);
+	__set_prec(single, half_fixed, half_fixed, single, single);
 	__set_Smode(S0hword, S1straight, S2zeros);	
 
 	__set_VRAptr_rV(_VR0);
@@ -88,14 +88,14 @@ void mod_qpsk_hw(uint32_t *bit_in, vspa_complex_float16* qpsk_out, uint32_t N)
 
 }
 
-void mod_bpsk_hw(uint32_t* bit_in, vspa_complex_float16* bpsk_out, uint32_t N)
+void mod_bpsk_hw(uint32_t* bit_in, vspa_complex_float32* bpsk_out, uint32_t N)
 {
 	iowr(LD_RF_TB_REAL_0, 0x00000002);
 	iowr(LD_RF_CONTROL, 1);
 
 	__clr_VRA();
 	__set_creg(255, 0);
-	__set_prec(single, half_fixed, half_fixed, single, half);
+	__set_prec(single, half_fixed, half_fixed, single, single);
 	__set_Smode(S0i1r1i1r1, S1straight, S2zeros);
 
 	__set_VRAptr_rV(_VR0);
