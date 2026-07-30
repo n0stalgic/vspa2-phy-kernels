@@ -21,6 +21,7 @@ AU                    ?= 16
 ARCH                   = vspa2
 CORE                   = sp
 DEFS                  ?=
+GEN_VECTORS          ?= gen_vectors.py
 
 VSPA_CC      = $(VSPA_TOOL)/bin/fsvspacc
 VSPA_SDK_INC = $(PROJ_ROOT)/vspa-sdk/inc
@@ -57,7 +58,7 @@ all: $(TARGET)
 # env-driven gen_vectors.py variant) after switching without `make clean`.
 .PHONY: generate
 generate:
-	python3 gen_vectors.py
+	python3 $(GEN_VECTORS)
 
 $(TARGET): $(SRCS) generate
 	@mkdir -p $(BUILD_DIR)

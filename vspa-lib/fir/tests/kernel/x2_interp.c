@@ -16,13 +16,15 @@ _VSPA_VECTOR_ALIGN static uint32_t _dbg_vr6[32];
 void x2_interp_init(x2_interp_state_t * __restrict state, float * __restrict coeffs,
                     int32_t num_samples)
 {
-	for (int32_t i = 0; i < NUM_COEFFICIENTS / 2; i++)
-	{
-	    state->E0_coeffs[i] = coeffs[2 * i];
-	    state->E1_coeffs[i] = coeffs[2 * i + 1];
-	}	
+	for (int32_t i = 0; i < NUM_COEFFICIENTS / 2; i++) {
+		state->E0_coeffs[i] = coeffs[2 * i];
+		state->E1_coeffs[i] = coeffs[2 * i + 1];
+	}
 
-	state->num_samples  = num_samples;
+	for (int32_t i = 0; i < 32; i++)
+		*(uint32_t *)&state->delay_hist[i] = 0;
+
+	state->num_samples = num_samples;
 
 }
 
@@ -79,12 +81,12 @@ __attribute__ ((noinline))
 	__ld_Rx_mem(0, state->E0_coeffs);
 	__ld_Rx_mem(1, state->E1_coeffs);
 
+	// Load delay line history into VR5
+	__ld_vec(state->delay_hist);
+	__ld_Rx(normal, 5);
+
 	for (int32_t i = 0; i < (state->num_samples / 32); i++)
 	{
-		if (i > 0) {
-			__ld_vec(input + (i - 1) * 32);
-			__ld_Rx(normal, 5);
-		}
 		__ld_vec(input + i * 32);
 		__ld_Rx(normal, 4);
 
@@ -145,7 +147,10 @@ __attribute__ ((noinline))
 		__set_VRAptr_rS0(_VR0);
 		__set_VRAptr_rV(_VR6);
 		__set_VRAptr_rSt(6);
-	
+
+		// Update VR5 (aka history) with current block 
+		__ld_vec(input + i * 32);
+		__ld_Rx(normal, 5);
 
 		// would eventually like to use the IPPU hardware for
 		// vector interleaving, but this will do for now.
@@ -163,6 +168,12 @@ __attribute__ ((noinline))
 			output[i * 64 + 32 + 2*k + 1] = state->E1_conv_buff[32 + k];
 		}
 	}
+
+	// VR5 holds the last input block
+	// Store it directly to delay_hist for the next call.
+	__set_VRAptr_rSt(5);
+	__st_vec(state->delay_hist);
+	__set_VRAptr_rSt(6);
 }
 
 void x2_interp_process(x2_interp_state_t *state,

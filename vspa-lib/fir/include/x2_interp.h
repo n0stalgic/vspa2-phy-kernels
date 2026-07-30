@@ -13,6 +13,7 @@ typedef struct
 	_VSPA_VECTOR_ALIGN float E1_coeffs[NUM_COEFFICIENTS];
 	_VSPA_VECTOR_ALIGN vspa_complex_float16 E0_conv_buff[NUM_COMPLEX_SAMPLES];
 	_VSPA_VECTOR_ALIGN vspa_complex_float16 E1_conv_buff[NUM_COMPLEX_SAMPLES];
+	_VSPA_VECTOR_ALIGN vspa_complex_float16 delay_hist[32];
 	int32_t num_samples;
 
 } x2_interp_state_t;

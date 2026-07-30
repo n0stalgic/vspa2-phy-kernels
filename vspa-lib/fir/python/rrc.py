@@ -26,27 +26,25 @@ import numpy as np
 _SING_EPS = 1e-9
 
 
-def rrc_taps(beta: float, sps: int, span: int) -> np.ndarray:
-    """Real RRC taps, length L = span*sps + 1, unit-energy normalized.
+def rrc_taps_n(beta: float, sps: int, n_taps: int) -> np.ndarray:
+    """Real RRC taps, explicit length, unit-energy normalized.
 
-    beta: rolloff factor, (0, 1].
-    sps:  samples per symbol (oversampling factor).
-    span: filter half-span in symbols on each side of the center tap.
+    beta:   rolloff factor, (0, 1].
+    sps:    samples per symbol (oversampling factor).
+    n_taps: number of FIR coefficients.
 
-    Unit-energy (sum(h**2) == 1) rather than peak-normalized: the standard
-    convention for a pulse-shaping filter, and it lands the peak tap well
-    inside Q15 range (~0.55 for beta=0.35/sps=4/span=8) with no need for an
-    arbitrary headroom fudge factor.
+    Even tap counts are centered at the half-sample point between the two
+    middle taps. This is useful for fixed-width polyphase filters where the
+    hardware wants, for example, exactly 16 taps per phase.
     """
-    length = span * sps + 1
-    n = np.arange(length) - (length - 1) // 2
+    n = np.arange(n_taps, dtype=np.float64) - (n_taps - 1) / 2.0
     t = n / sps
 
     at_zero = np.abs(t) < _SING_EPS
     at_sing = np.abs(np.abs(t) - 1.0 / (4 * beta)) < _SING_EPS
     general = ~(at_zero | at_sing)
 
-    h = np.empty(length, dtype=np.float64)
+    h = np.empty(n_taps, dtype=np.float64)
     h[at_zero] = 1 - beta + 4 * beta / np.pi
     h[at_sing] = (beta / np.sqrt(2)) * (
         (1 + 2 / np.pi) * np.sin(np.pi / (4 * beta))
@@ -58,3 +56,18 @@ def rrc_taps(beta: float, sps: int, span: int) -> np.ndarray:
     ) / (np.pi * tg * (1 - (4 * beta * tg) ** 2))
 
     return h / np.sqrt(np.sum(h ** 2))
+
+
+def rrc_taps(beta: float, sps: int, span: int) -> np.ndarray:
+    """Real RRC taps, length L = span*sps + 1, unit-energy normalized.
+
+    beta: rolloff factor, (0, 1].
+    sps:  samples per symbol (oversampling factor).
+    span: filter span in symbols.
+
+    Unit-energy (sum(h**2) == 1) rather than peak-normalized: the standard
+    convention for a pulse-shaping filter, and it lands the peak tap well
+    inside Q15 range (~0.55 for beta=0.35/sps=4/span=8) with no need for an
+    arbitrary headroom fudge factor.
+    """
+    return rrc_taps_n(beta, sps, span * sps + 1)

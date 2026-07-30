@@ -24,15 +24,14 @@ for p in (str(_COMM_PY), str(_FIR_PY)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from rrc import rrc_taps
+from rrc import rrc_taps_n
 from utils.hex_io import write_hex_u32
 
 OUTDIR    = _X2_DIR / 'vectors'
 N_SAMPLES = 64    # original symbols; must be multiple of 16
-N_TAPS    = 32    # float32 taps; rrc_taps(sps=1, span=31) -> 32 taps
+N_TAPS    = 32    # float32 taps; 16 taps per x2 polyphase branch
 BETA      = 0.35
-SPS       = 1
-SPAN      = 31
+SPS       = 2
 
 
 def _write_complex_f32(c: np.ndarray, path: str) -> None:
@@ -74,7 +73,7 @@ def main() -> None:
              + 1j * rng.uniform(-0.5, 0.5, N_SAMPLES))
     x = x_raw.astype(np.complex64)
 
-    taps_raw = rrc_taps(BETA, SPS, SPAN)
+    taps_raw = rrc_taps_n(BETA, SPS, N_TAPS)
     assert len(taps_raw) == N_TAPS, f'expected {N_TAPS} taps, got {len(taps_raw)}'
     taps = taps_raw.astype(np.float32)
 

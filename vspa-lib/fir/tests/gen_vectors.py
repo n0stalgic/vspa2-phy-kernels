@@ -33,15 +33,14 @@ for p in (str(_COMM_PY), str(_FIR_PY)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from rrc import rrc_taps
+from rrc import rrc_taps_n
 from utils.hex_io import write_hex_u32
 
 OUTDIR    = _TESTS_DIR / 'vectors'
 N_SAMPLES = 64
 N_TAPS    = 32
 BETA      = 0.35
-SPS       = 1
-SPAN      = 31
+SPS       = 2
 
 
 def _write_complex_f16(c: np.ndarray, path: str) -> None:
@@ -113,7 +112,7 @@ def main() -> None:
     x = (x_raw.real.astype(np.float16).astype(np.float32)
          + 1j * x_raw.imag.astype(np.float16).astype(np.float32)).astype(np.complex64)
 
-    taps_raw = rrc_taps(BETA, SPS, SPAN)
+    taps_raw = rrc_taps_n(BETA, SPS, N_TAPS)
     assert len(taps_raw) == N_TAPS, f'expected {N_TAPS} taps, got {len(taps_raw)}'
     taps = taps_raw.astype(np.float32)
 
