@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// Steady-state TX chain benchmark: QAM -> interpolation -> NCO mixer.
+// Steady-state TX chain benchmark: QAM -> interpolation [-> NCO mixer].
 
 #include <stdint.h>
 #include <stdio.h>
@@ -16,8 +16,14 @@ extern void mod_qpsk_hw(unsigned int *bit_in, vspa_complex_float16 *qam_out,
 extern void mod_16qam_hw(unsigned int *bit_in, vspa_complex_float16 *qam_out,
                          unsigned int N);
 
+#ifndef TX_BYPASS_MIXER
+#define TX_BYPASS_MIXER 0
+#endif
+
+#if !TX_BYPASS_MIXER
 extern unsigned int mixer_vspa(cfixed16_t *mix_out, cfixed16_t *mix_in,
                                uint32_t phase_in, int32_t freq_in, uint32_t L);
+#endif
 
 #define QAM_MODE_BPSK     1
 #define QAM_MODE_QPSK     2
@@ -86,7 +92,9 @@ _VSPA_VECTOR_ALIGN static unsigned int bit_in[N_INPUT_WORDS];
 _VSPA_VECTOR_ALIGN static float32_t taps[N_TAPS];
 _VSPA_VECTOR_ALIGN static vspa_complex_float16 qam_out[N_SYMBOLS];
 _VSPA_VECTOR_ALIGN static vspa_complex_float16 interp_out[N_INTERP];
+#if !TX_BYPASS_MIXER
 _VSPA_VECTOR_ALIGN static cfixed16_t tx_out[N_INTERP];
+#endif
 
 void main(void)
 {
@@ -116,8 +124,10 @@ void main(void)
     for (block = 0; block < STREAM_BLOCKS; block++) {
         QAM_MOD_FN(bit_in, qam_out, (unsigned int)STREAM_QAM_LINES);
         INTERP_PROC(&interp_state, qam_out, interp_out);
+#if !TX_BYPASS_MIXER
         phase = mixer_vspa(tx_out, (cfixed16_t *)interp_out,
                            phase, FREQ_IN, MIX_LINES);
+#endif
     }
     KCYC_STOP_PRINT();
 
@@ -125,10 +135,14 @@ void main(void)
     total_output_samples = (long)STREAM_BLOCKS * N_INTERP;
 
     for (i = 0; i < N_INTERP; i++)
+#if TX_BYPASS_MIXER
+        checksum ^= ((const uint32_t *)interp_out)[i];
+#else
         checksum ^= ((const uint32_t *)tx_out)[i];
+#endif
 
-    printf("TX_STREAM: blocks=%d qam_lines_per_block=%d symbols_per_block=%d\n",
-           STREAM_BLOCKS, STREAM_QAM_LINES, N_SYMBOLS);
+    printf("TX_STREAM: blocks=%d qam_lines_per_block=%d symbols_per_block=%d mixer=%d\n",
+           STREAM_BLOCKS, STREAM_QAM_LINES, N_SYMBOLS, !TX_BYPASS_MIXER);
     printf("TX_STREAM: input_bytes=%ld output_samples=%ld factor=%d\n",
            (long)STREAM_BLOCKS * N_INPUT_WORDS * 4,
            total_output_samples, INTERP_FACTOR);

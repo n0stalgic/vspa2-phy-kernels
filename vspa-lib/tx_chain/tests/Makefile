@@ -4,6 +4,7 @@
 QAM_MODE ?= QPSK
 INTERP   ?= x2
 STREAM   ?= 0
+MIXER    ?= 1
 export QAM_MODE
 export INTERP
 
@@ -14,6 +15,15 @@ KERNEL := $(KERNEL)_stream
 HARNESS = test_tx_chain_stream.c
 else
 HARNESS = test_tx_chain.c
+endif
+
+ifeq ($(MIXER),0)
+KERNEL := $(KERNEL)_nomix
+MIXER_SRC =
+MIXER_DEF = -DTX_BYPASS_MIXER=1
+else
+MIXER_SRC = ../../mixer/tests/kernel/mixer.c
+MIXER_DEF = -DTX_BYPASS_MIXER=0
 endif
 
 ifeq ($(INTERP),x4)
@@ -27,10 +37,11 @@ endif
 SRCS   = $(HARNESS) \
          ../../psk_hw/tests/kernel/psk_hw.c \
          $(INTERP_SRC) \
-         ../../mixer/tests/kernel/mixer.c
+         $(MIXER_SRC)
 
 DEFS = -DQAM_MODE=QAM_MODE_$(QAM_MODE) \
        $(INTERP_DEF) \
+       $(MIXER_DEF) \
        -I$(abspath ../../fir/include)
 
 include ../../common/kernel.mk
