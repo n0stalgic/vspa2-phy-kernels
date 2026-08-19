@@ -7,33 +7,33 @@
 
 #pragma optimization_level 3
 
-#ifndef X4_ADVANCE_ROLS
-#define X4_ADVANCE_ROLS 39
-#endif
-#define X4_RESTORE_ROLS (64 - X4_ADVANCE_ROLS - 2 * X4_PHASE_TAPS)
+#define X4_SECOND_PASS_POSITION 48
 
-#define X4_RUN_PHASE(coeff_reg, conv_buff)                                      \
+#define X4_RUN_PHASE(coeff_reg, conv_buff, taps)                                \
 	do {                                                                    \
-		/* pass 1: output samples k=0..15 for this phase */             \
-		__set_VRAptr_rS0(coeff_reg);                                    \
-		__rd_S0(); __rd_S1(); __rmad(); __rol();                        \
-		for (j = 1; j < X4_PHASE_TAPS; j++) {                           \
-			__rd_S0(); __rd_S1(); __rmac(); __rol();                \
-		}                                                               \
-		__wr(straight);                                                 \
-		__st_vec(conv_buff);                                            \
-		/* Move from the first 16-lane output window to the second. */   \
-		for (j = 0; j < X4_ADVANCE_ROLS; j++) __rol();                  \
-		/* pass 2: output samples k=16..31 for this phase */            \
-		__set_VRAptr_rS0(coeff_reg);                                    \
-		__rd_S0(); __rd_S1(); __rmad(); __rol();                        \
-		for (j = 1; j < X4_PHASE_TAPS; j++) {                           \
-			__rd_S0(); __rd_S1(); __rmac(); __rol();                \
-		}                                                               \
-		__wr(straight);                                                 \
-		__st_vec((conv_buff) + 32);                                     \
-		/* Return R4:R5 to delay position 0 before the next phase. */    \
-		for (j = 0; j < X4_RESTORE_ROLS; j++) __rol();                  \
+		/* Reload pristine pass-one and pass-two windows for this phase. */\
+		__ld_Rx_mem(4, state->window_stage);                               \
+		__ld_Rx_mem(5, state->window_stage + 32);                          \
+		__ld_Rx_mem(6, state->window_stage + 64);                          \
+		__ld_Rx_mem(7, state->window_stage + 96);                          \
+		__set_rot(R4R5l2);                                                \
+		__set_VRAptr_rS1(_VR4);                                           \
+		__set_VRAptr_rS0(coeff_reg);                                      \
+		__rd_S0(); __rd_S1(); __rmad(); __rol();                          \
+		for (j = 1; j < (taps); j++) {                                   \
+			__rd_S0(); __rd_S1(); __rmac(); __rol();                  \
+		}                                                                 \
+		__wr(straight);                                                   \
+		__st_vec(conv_buff);                                              \
+		__set_rot(R6R7l2);                                                \
+		__set_VRAptr_rS1(_VR6);                                           \
+		__set_VRAptr_rS0(coeff_reg);                                      \
+		__rd_S0(); __rd_S1(); __rmad(); __rol();                          \
+		for (j = 1; j < (taps); j++) {                                   \
+			__rd_S0(); __rd_S1(); __rmac(); __rol();                  \
+		}                                                                 \
+		__wr(straight);                                                   \
+		__st_vec((conv_buff) + 32);                                       \
 	} while (0)
 
 
@@ -95,11 +95,10 @@ __attribute__ ((noinline))
 	//     -> VR3 : E3 coefficients, padded to 9 active taps
 	// rS1 -> VR4 : input delay line
 	//        VR5 : previous input block / delay history
-	// rV  -> VR6 : phase filter output scratch
+	// rV  -> VR4 : phase filter output scratch after pass-one input is used
 	//
 	// A 33-tap RRC at sps=4, span=8 splits as 9/8/8/8 taps.
-	// The short phases carry an explicit zero in the ninth slot so every
-	// phase runs the same 9-MAC schedule.
+	// The short phases carry an explicit zero in the ninth coefficient slot.
 	//
 	// Vector Rotation Unit (VRU):
 	// R4:R5 left rotation, 2 HW (1 complex fp16) per tap.
@@ -107,20 +106,18 @@ __attribute__ ((noinline))
 	// so rotations bring causal history samples into R4 instead of zeros.
 	// Full R4:R5 wrap = 64 rols.
 	//
-	// Each phase runs:
-	//   9 rols  : pass 1 taps for output samples k=0..15
-	//   39 rols : advance to output samples k=16..31
-	//   9 rols  : pass 2 taps
-	//   7 rols  : restore delay position to 0
-	// Total = 64 rols, so every phase starts from the same delay alignment.
+	// The pass-two window is formed once at rotation position 48 and saved
+	// alongside the pristine pass-one window. Both are reloaded per phase.
 	//--------------------------------------------------------
 
 	__set_prec(single, half, single, single, half_fixed);
 	__set_Smode(S0hword, S1straight, S2zeros);
 	__set_VRAptr_rS0(_VR0);
 	__set_VRAptr_rS1(_VR4);
-	__set_VRAptr_rV(_VR6);
-	__set_VRAptr_rSt(6);
+	// Pass one no longer needs R4 once its MAC completes, so reuse VR4 for
+	// the accumulator and stores. This preserves the pass-two R6:R7 window.
+	__set_VRAptr_rV(_VR4);
+	__set_VRAptr_rSt(4);
 	__set_VRAincr_rS0(2);
 	__set_VRAincr_rS1(0);
 	__set_rot(R4R5l2);
@@ -139,10 +136,26 @@ __attribute__ ((noinline))
 		__ld_vec(input + i * 32);
 		__ld_Rx(normal, 4);
 
-		X4_RUN_PHASE(_VR0, state->E0_conv_buff);
-		X4_RUN_PHASE(_VR1, state->E1_conv_buff);
-		X4_RUN_PHASE(_VR2, state->E2_conv_buff);
-		X4_RUN_PHASE(_VR3, state->E3_conv_buff);
+		// Save the pristine pass-one pair.
+		__set_VRAptr_rSt(4);
+		__st_vec(state->window_stage);
+		__set_VRAptr_rSt(5);
+		__st_vec(state->window_stage + 32);
+
+		// Form the pass-two pair once, then reuse it for all four phases.
+		__set_rot(R4R5l2);
+		for (j = 0; j < X4_SECOND_PASS_POSITION; j++)
+			__rol();
+		__set_VRAptr_rSt(4);
+		__st_vec(state->window_stage + 64);
+		__set_VRAptr_rSt(5);
+		__st_vec(state->window_stage + 96);
+		__set_VRAptr_rSt(4);
+
+		X4_RUN_PHASE(_VR0, state->E0_conv_buff, 9);
+		X4_RUN_PHASE(_VR1, state->E1_conv_buff, 8);
+		X4_RUN_PHASE(_VR2, state->E2_conv_buff, 8);
+		X4_RUN_PHASE(_VR3, state->E3_conv_buff, 8);
 
 		// Update VR5 (aka history) with the current block for the next block.
 		__ld_vec(input + i * 32);
@@ -170,7 +183,6 @@ __attribute__ ((noinline))
 	// the next call.
 	__set_VRAptr_rSt(5);
 	__st_vec(state->delay_hist);
-	__set_VRAptr_rSt(6);
 }
 
 
